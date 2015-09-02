@@ -57,7 +57,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("new request %s", r.RequestURI)
 
-	if HyjackRoute == "" || HyjackRoute == r.URL.String() {
+	if HyjackRoute == "" || HyjackRoute == r.URL.Path {
 		log.Printf("hyjacking route %s (%s)", HyjackRoute, ResponseTime.String())
 		<-time.Tick(ResponseTime)
 
