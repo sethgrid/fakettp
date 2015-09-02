@@ -1,13 +1,13 @@
 Fakettp
 --------
 
-Fakettp is an http debugging proxy allowing you to easily set up responses for http endpoints while testing. One key feature is the ability to proxy all requests aside from one endpoint, while faking the data that comes back from the one endpoint. Fakettp allows you to control the following:
+Fakettp is an http debugging proxy allowing you to easily set up responses for http endpoints while testing. Fakettp allows you to control the following:
   - response code
   - response time
   - response headers
   - response body
-  - set the response for all calls
-  - or set the response for a single endpoint and reverse proxy all other calls
+
+You can have the above as global responses, or you can pass in an individual endpoint where those responses apply, and proxy all other endpoints to the original service. This gives you the ability to test your system against the other service and simulate an error on a single endpoint while the rest of the service works normally.
 
 Use Case
 --------
