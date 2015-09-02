@@ -77,6 +77,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// not hyjacking this time
 	log.Println("proxying request")
 
 	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d%s", ProxyHost, ProxyPort, r.RequestURI), r.Body)
