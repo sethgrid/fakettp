@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -10,10 +11,14 @@ import (
 )
 
 var Port int
+var HyjackRoute string
 var ResponseCode int
 var ResponseTime time.Duration
 var ResponseBody string
 var ResponseHeaders StringSlice
+
+var ProxyHost string
+var ProxyPort int
 
 // StringSlice adheres to the flag Var interface, and allows for the -header flag to be reused
 type StringSlice []string
@@ -23,6 +28,9 @@ func main() {
 	flag.IntVar(&ResponseCode, "code", 200, "set the http status code with which to respond")
 	flag.DurationVar(&ResponseTime, "response_time", time.Millisecond*10, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
+	flag.StringVar(&HyjackRoute, "hyjack", "/", "set the route you wish to hijack if using the reverse proxy host and port")
+	flag.StringVar(&ProxyHost, "proxy_host", "http://0.0.0.0", "the host we will reverse proxy to (include protocol)")
+	flag.IntVar(&ProxyPort, "proxy_port", 0, "the proxy port")
 	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'")
 	flag.Parse()
 
@@ -35,23 +43,60 @@ func main() {
 	}
 }
 
+// defaultHanlder will either proxy the request or substitute in the hyjack data
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("new request, waiting %s", ResponseTime.String())
-	<-time.Tick(ResponseTime)
 
-	for _, header := range ResponseHeaders {
-		parts := strings.Split(header, ": ")
+	if HyjackRoute == "" || HyjackRoute == r.URL.String() {
+		log.Printf("hyjacking route %s", HyjackRoute)
+		<-time.Tick(ResponseTime)
 
-		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-			key, value := parts[0], parts[1]
-			log.Printf("setting header %s:%s", key, value)
-			w.Header().Add(key, value)
-		} else {
-			log.Printf("skipping header %s (need a value on both sides of :)", header)
+		for _, header := range ResponseHeaders {
+			parts := strings.Split(header, ": ")
+
+			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+				key, value := parts[0], parts[1]
+				log.Printf("setting header %s:%s", key, value)
+				w.Header().Add(key, value)
+			} else {
+				log.Printf("skipping header %s (need a value on both sides of :)", header)
+			}
+		}
+		w.WriteHeader(ResponseCode)
+		w.Write([]byte(ResponseBody))
+		return
+	}
+
+	log.Println("proxying request")
+
+	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d", ProxyHost, ProxyPort), r.Body)
+	if err != nil {
+		log.Printf("error with proxy request - %v", err)
+		return
+	}
+
+	for k, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(k, value)
 		}
 	}
-	w.WriteHeader(ResponseCode)
-	w.Write([]byte(ResponseBody))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("error with proxy request - %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	for k, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(k, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
 }
 
 // String adheres to the flag Var interface
