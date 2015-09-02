@@ -45,3 +45,18 @@ $ curl -v localhost:5555/foo/bar/raz -d '{"foo":"bar"}'
 * Connection #0 to host localhost left intact
 {"json":true}
 ```
+
+Sample Logs
+-----------
+
+Logs show the requested URI, if the request was hyjacked or proxied, and shows a request id at the beginning of log lines dealing with a request.
+
+```
+2015/09/02 14:10:22 starting on port :5555
+[1dfc34e] 2015/09/02 14:10:23 new request /api/user/get.json
+[1dfc34e] 2015/09/02 14:10:23 proxying request
+[4666fb4] 2015/09/02 14:10:36 new request /api/functions.json
+[4666fb4] 2015/09/02 14:10:36 hyjacking route /api/functions.json (10ms)
+[4666fb4] 2015/09/02 14:10:36 setting header Content-Type:application/json
+[4666fb4] 2015/09/02 14:10:36 setting header Cache-Control:max-age=3600
+```
