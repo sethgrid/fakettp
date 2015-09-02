@@ -55,7 +55,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	reqID := fmt.Sprintf("[%07x] ", rand.Int31n(1e8))
 	log.SetPrefix(reqID)
 
-	log.Printf("new request")
+	log.Printf("new request %s", r.RequestURI)
 
 	if HyjackRoute == "" || HyjackRoute == r.URL.String() {
 		log.Printf("hyjacking route %s (%s)", HyjackRoute, ResponseTime.String())
