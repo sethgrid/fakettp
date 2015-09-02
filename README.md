@@ -19,6 +19,13 @@ Sample Usage
 
 From the source or compiled binary, just set the response you want (note that you can pass in multiple headers to be returned):
 
+
+Hyjac a single endpoint and proxy all other calls:
+```
+go run main.go -proxy_host http://example.com -proxy_port 9092 -hyjack /api/user -port 5555 -code 418 -body "I'm a teapot"
+```
+
+Return the same data for all calls to this service:
 ```
 $ go run main.go -port 5555 -code 201 -header 'Content-Type: application/json' -header 'Cache-Control: max-age=3600' -body '{"json":true}'
 ```
