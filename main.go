@@ -12,12 +12,13 @@ import (
 )
 
 var Port int
-var HyjackRoute string
 var ResponseCode int
 var ResponseTime time.Duration
 var ResponseBody string
 var ResponseHeaders StringSlice
 
+var Methods StringSlice
+var HyjackRoute string
 var ProxyHost string
 var ProxyPort int
 
@@ -33,10 +34,12 @@ func main() {
 	flag.IntVar(&ResponseCode, "code", 200, "set the http status code with which to respond")
 	flag.DurationVar(&ResponseTime, "response_time", time.Millisecond*10, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
+	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
+
+	flag.Var(&Methods, "method", "used with the -hyjack route to limit hyjacking to the given http verb. Multiple -method parameters allowed.")
 	flag.StringVar(&HyjackRoute, "hyjack", "", "set the route you wish to hijack if using the reverse proxy host and port")
 	flag.StringVar(&ProxyHost, "proxy_host", "http://0.0.0.0", "the host we will reverse proxy to (include protocol)")
 	flag.IntVar(&ProxyPort, "proxy_port", 0, "the proxy port")
-	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
 	flag.Parse()
 
 	log.Printf("starting on port :%d", Port)
@@ -55,10 +58,10 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	reqID := fmt.Sprintf("[%07x] ", rand.Int31n(1e8))
 	log.SetPrefix(reqID)
 
-	log.Printf("new request %s", r.RequestURI)
+	log.Printf("new request %s %s", r.Method, r.RequestURI)
 
-	if HyjackRoute == "" || HyjackRoute == r.URL.Path {
-		log.Printf("hyjacking route %s (%s)", HyjackRoute, ResponseTime.String())
+	if willHyjack(r.Method, Methods, r.URL.Path, HyjackRoute) {
+		log.Printf("hyjacking route %s (waiting %s)", HyjackRoute, ResponseTime.String())
 		<-time.Tick(ResponseTime)
 
 		for _, header := range ResponseHeaders {
@@ -108,6 +111,27 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
+}
+
+// willHyjack returns true when we have a hyjack route that matches our request path,
+// and takes into account the methods we want to hyjack
+func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string) bool {
+	isHyjack := false
+
+	if hyjackRoute != "" {
+		if len(hyjackMethods) == 0 {
+			if hyjackRoute == requestPath {
+				isHyjack = true
+			}
+		}
+		for _, method := range hyjackMethods {
+			if strings.ToUpper(method) == strings.ToUpper(requestMethod) && hyjackRoute == requestPath {
+				isHyjack = true
+			}
+		}
+	}
+
+	return isHyjack
 }
 
 // String adheres to the flag Var interface
