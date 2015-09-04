@@ -66,7 +66,7 @@ When passing command line flags, you are limited to either hyjacking all request
 Sample Config:
 ```json
 {
-    "proxy_host": "0.0.0.0",
+    "proxy_host": "http://0.0.0.0",
     "proxy_port": 9092,
     "port": 5000,
     "fakes": [

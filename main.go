@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 	"time"
 )
@@ -152,40 +153,37 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			w.WriteHeader(fake.ResponseCode)
 			w.Write([]byte(fake.ResponseBody))
+			log.Println("hyjack request complete")
 			return
 		}
 	}
 	// not hyjacking this time
 	log.Println("proxying request")
 
-	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s:%d%s", GlobalConfig.ProxyHost, GlobalConfig.ProxyPort, r.RequestURI), r.Body)
-	if err != nil {
-		log.Printf("error with proxy request - %v", err)
-		return
-	}
-
-	for k, values := range r.Header {
-		for _, value := range values {
-			req.Header.Add(k, value)
+	director := func(req *http.Request) {
+		// handle both cases where we got `http://hostname` or `hostname`
+		parts := strings.Split(GlobalConfig.ProxyHost, "://")
+		var scheme string
+		var host string
+		if len(parts) == 1 {
+			scheme = "http"
+			host = fmt.Sprintf("%s:%d", parts[0], GlobalConfig.ProxyPort)
+		} else if len(parts) >= 2 {
+			scheme = parts[0]
+			host = fmt.Sprintf("%s:%d", parts[1], GlobalConfig.ProxyPort)
+		} else {
+			log.Printf("issue splitting host on :// - %s", GlobalConfig.ProxyHost)
+			return
 		}
+
+		req = r
+		req.URL.Scheme = scheme
+		req.URL.Host = host
 	}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("error with proxy request - %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-
-	for k, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(k, value)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
+	proxy := &httputil.ReverseProxy{Director: director}
+	proxy.ServeHTTP(w, r)
+	log.Printf("proxy request complete")
 }
 
 // willHyjack returns true when we have a hyjack route that matches our request path,
