@@ -12,7 +12,7 @@ You can set global responses, or you can pass in individual endpoints where thos
 Use Case
 --------
 
-What inspired this repo!: We had Service A calling Service B's endpoints internally. We needed some of the endpoints to do their job, while for one of them we needed to verify how Service A behaved when it returned different content and status codes. After using this tool, our QA was able to verify all the edge-cases they were interested in!
+What inspired this repo!: We had Service A calling Service B's endpoints internally. We needed some of the endpoints in Service B to do their job, while for one of them we needed to verify how Service A behaved when Service B returned different content and status codes. After using this tool, our QA was able to verify all the edge-cases with which they were interested!
 
 Sample Usage
 ------------
@@ -61,7 +61,7 @@ $ curl -v localhost:5555/foo/bar/raz -d '{"foo":"bar"}'
 Config File
 -----------
 
-When passing command line flags, you are limited to either hyjacking all requests or only requests to a single endpoint. With a config file, you can specify multiple routes to behave differently.
+When passing command line flags, you are limited to either hyjacking all requests or only requests to a single endpoint. With a config file, you can specify multiple routes to behave differently. Note: if you use the `-config` flag, all other flags are ignored.
 
 Sample Config:
 ```json
