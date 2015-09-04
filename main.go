@@ -16,10 +16,10 @@ import (
 type StringSlice []string
 
 type Config struct {
-	ProxyHost string `json:"proxy_host"`
-	ProxyPort int    `json:"proxy_port"`
-	Port      int    `json:"port"`
-	Fakes     []Fake `json:"fakes"`
+	ProxyHost string  `json:"proxy_host"`
+	ProxyPort int     `json:"proxy_port"`
+	Port      int     `json:"port"`
+	Fakes     []*Fake `json:"fakes"`
 }
 
 type Fake struct {
@@ -82,6 +82,9 @@ func main() {
 
 		// set all the response times from config file string to time.Duration
 		for _, fake := range GlobalConfig.Fakes {
+			if fake.ResponseTimeRaw == "" {
+				continue
+			}
 			d, err := time.ParseDuration(fake.ResponseTimeRaw)
 			if err != nil {
 				log.Fatalf("%v", err)
@@ -106,7 +109,7 @@ func main() {
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
 
-		config.Fakes = []Fake{*fake}
+		config.Fakes = []*Fake{fake}
 
 		GlobalConfig = config
 
@@ -133,8 +136,9 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	for _, fake := range GlobalConfig.Fakes {
 		if willHyjack(r.Method, fake.Methods, r.URL.Path, fake.HyjackPath) {
 			log.Printf("hyjacking route %s (waiting %s)", fake.HyjackPath, fake.ResponseTime.String())
-			<-time.Tick(fake.ResponseTime)
-
+			if fake.ResponseTime > 0 {
+				<-time.Tick(fake.ResponseTime)
+			}
 			for _, header := range fake.ResponseHeaders {
 				parts := strings.Split(header, ": ")
 
