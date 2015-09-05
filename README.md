@@ -106,3 +106,8 @@ Logs show the requested URI, if the request was hyjacked or proxied, and shows a
 [4666fb4] 2015/09/02 14:10:36 setting header Content-Type:application/json
 [4666fb4] 2015/09/02 14:10:36 setting header Cache-Control:max-age=3600
 ```
+
+Tests
+-----
+
+You can run tests like normal with `$ go test`, however, you can make the tests show application level logging with `$ go test -show_logs`. Tests make use of ports `4333` and `4332` and require these ports to be available.

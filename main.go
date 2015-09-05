@@ -80,12 +80,15 @@ func main() {
 	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
 	log.Printf("starting on port :%d", GlobalConfig.Port)
 
+	startFakettp(GlobalConfig.Port)
+}
+
+func startFakettp(port int) {
 	http.HandleFunc("/", defaultHandler)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", GlobalConfig.Port), nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int) *Config {

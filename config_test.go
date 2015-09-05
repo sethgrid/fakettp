@@ -6,6 +6,7 @@ import (
 )
 
 func TestConfigFromFile(t *testing.T) {
+	// flag parameters
 	var Port int
 	var ResponseCode int
 	var ResponseTime time.Duration
@@ -92,6 +93,7 @@ func TestConfigFromFile(t *testing.T) {
 }
 
 func TestConfigFromParameters(t *testing.T) {
+	// flag parameters
 	var Port int = 5000
 	var ResponseCode int = 201
 	var ResponseTime time.Duration = time.Millisecond * 1015
@@ -157,6 +159,7 @@ func TestConfigFromParameters(t *testing.T) {
 }
 
 func TestConfigFromFileAndParameters(t *testing.T) {
+	// flag parameters
 	var Port int = 5001
 	var ResponseCode int = 201
 	var ResponseTime time.Duration = time.Millisecond * 1015
