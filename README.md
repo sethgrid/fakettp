@@ -17,7 +17,7 @@ What inspired this repo!: We had Service A calling Service B's endpoints interna
 Sample Usage
 ------------
 
-From the source or compiled binary, just set the response you want. Note that you can pass in multiple headers to be returned by using `-header` repeatedly. You can also limit which methods the hyjacking will affect with multiple `-method` parameters.
+From the source or compiled binary, just set the response you want. Note that you can pass in multiple headers to be returned by using `-header` repeatedly. You can also limit which methods the hyjacking will affect with multiple `-method` parameters. You can also choose to match against a pattern string if you additionally pass in the `-pattern_match` flag.
 
 
 Hyjac a single endpoint and proxy all other calls:
@@ -30,9 +30,14 @@ We can also use a config file instead (more on this below!):
 go run main.go -config my.conf
 ```
 
+We can match against regular expressions / patterns:
+```
+$ go run main.go -port 5555 -code 201 -header POST -pattern_match -hyjack '\/api\/users\/[0-9]+\/credits.json'
+```
+
 Return the same data for all calls to this service:
 ```
-$ go run main.go -port 5555 -code 201 -header 'Content-Type: application/json' -header 'Cache-Control: max-age=3600' -body '{"json":true}'
+$ go run main.go -port 5555 -code 201 -header 'Content-Type: application/json' -header 'Cache-Control: max-age=3600' -body '{"json":true} -method POST -method GET'
 ```
 
 The above setup would result in the following response from any path on `localhost:5555`:
