@@ -17,7 +17,7 @@ What inspired this repo!: We had Service A calling Service B's endpoints interna
 Sample Usage
 ------------
 
-From the source or compiled binary, just set the response you want (note that you can pass in multiple headers to be returned):
+From the source or compiled binary, just set the response you want. Note that you can pass in multiple headers to be returned by using `-header` repeatedly. You can also limit which methods the hyjacking will affect with multiple `-method` parameters.
 
 
 Hyjac a single endpoint and proxy all other calls:
