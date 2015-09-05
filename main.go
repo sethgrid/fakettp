@@ -67,22 +67,39 @@ func main() {
 	flag.IntVar(&ProxyPort, "proxy_port", 0, "the proxy port")
 	flag.Parse()
 
+	ConfigData := []byte{}
+	var err error
+
 	if ConfigPath != "" {
-		// if we have a config file, use it for all config values
-		data, err := ioutil.ReadFile(ConfigPath)
+		ConfigData, err = ioutil.ReadFile(ConfigPath)
 		if err != nil {
-			log.Fatalf("%s", string(data))
+			log.Fatalf("%s", string(ConfigData))
 		}
-		config := &Config{}
-		err = json.Unmarshal(data, &config)
+	}
+
+	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	log.Printf("starting on port :%d", GlobalConfig.Port)
+
+	http.HandleFunc("/", defaultHandler)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", GlobalConfig.Port), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int) *Config {
+	config := &Config{}
+	// config.Fakes = []*Fake{}
+
+	if len(ConfigData) != 0 {
+		err := json.Unmarshal(ConfigData, &config)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
 
-		GlobalConfig = config
-
 		// set all the response times from config file string to time.Duration
-		for _, fake := range GlobalConfig.Fakes {
+		for _, fake := range config.Fakes {
 			if fake.ResponseTimeRaw == "" {
 				continue
 			}
@@ -92,37 +109,32 @@ func main() {
 			}
 			fake.ResponseTime = d
 		}
+	}
 
-		log.Printf("starting on port :%d using config %s", config.Port, ConfigPath)
-
-	} else {
-		// if we did not get a config generated from a file, generate one from the
-		// passed in flags
-		config := &Config{}
+	// if we had command line values, use those too (override port and proxy settings)
+	if Port != 0 {
 		config.Port = Port
+	}
+	if ProxyHost != "" {
 		config.ProxyHost = ProxyHost
+	}
+	if ProxyPort != 0 {
 		config.ProxyPort = ProxyPort
+	}
 
+	// if there is data for a fake, grab it
+	if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
 		fake := &Fake{}
 		fake.ResponseHeaders = ResponseHeaders
 		fake.HyjackPath = HyjackPath
+		fake.Methods = Methods
 		fake.ResponseBody = ResponseBody
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
-
-		config.Fakes = []*Fake{fake}
-
-		GlobalConfig = config
-
-		log.Printf("starting on port :%d", config.Port)
+		config.Fakes = append(config.Fakes, fake)
 	}
 
-	http.HandleFunc("/", defaultHandler)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", GlobalConfig.Port), nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	return config
 }
 
 // defaultHanlder will either proxy the request or substitute in the hyjack data

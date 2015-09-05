@@ -61,7 +61,7 @@ $ curl -v localhost:5555/foo/bar/raz -d '{"foo":"bar"}'
 Config File
 -----------
 
-When passing command line flags, you are limited to either hyjacking all requests or only requests to a single endpoint. With a config file, you can specify multiple routes to behave differently. Note: if you use the `-config` flag, all other flags are ignored.
+When passing command line flags, you are limited to either hyjacking all requests or only requests to a single endpoint. With a config file, you can specify multiple routes to behave differently. Note: config values are overridden by command line flags in the case of `proxy_host`, `proxy_port`, and `port`. For all other values, they add an additional fake for hyjacking.
 
 Sample Config:
 ```json
