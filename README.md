@@ -87,7 +87,12 @@ Sample Config:
                 "Cache-Control: max-age=3600"
             ],
             "time": "1m3s15ms"
-        }
+        },
+        {
+            "hyjack": "\/api\/users\/[0-9]+\/credits.json",
+            "code": 404,
+            "pattern_match": true
+        },
     ]
 }
 ```

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -30,6 +31,7 @@ type Fake struct {
 	ResponseCode    int         `json:"code"`
 	ResponseHeaders StringSlice `json:"headers"`
 	ResponseTimeRaw string      `json:"time"`
+	IsRegex         bool        `json:"pattern_match"`
 	ResponseTime    time.Duration
 }
 
@@ -47,8 +49,9 @@ func main() {
 	var ResponseTime time.Duration
 	var ResponseBody string
 	var ResponseHeaders StringSlice
-
 	var Methods StringSlice
+	var IsRegex bool
+
 	var HyjackPath string
 	var ProxyHost string
 	var ProxyPort int
@@ -60,8 +63,9 @@ func main() {
 	flag.DurationVar(&ResponseTime, "time", time.Millisecond*10, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
 	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
-
+	flag.BoolVar(&IsRegex, "pattern_match", false, "set to true to match route patterns with Go regular expressions")
 	flag.Var(&Methods, "method", "used with the -hyjack route to limit hyjacking to the given http verb. Multiple -method parameters allowed.")
+
 	flag.StringVar(&HyjackPath, "hyjack", "", "set the route you wish to hijack if using the reverse proxy host and port")
 	flag.StringVar(&ProxyHost, "proxy_host", "http://0.0.0.0", "the host we will reverse proxy to (include protocol)")
 	flag.IntVar(&ProxyPort, "proxy_port", 0, "the proxy port")
@@ -77,7 +81,7 @@ func main() {
 		}
 	}
 
-	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 	log.Printf("starting on port :%d", GlobalConfig.Port)
 
 	startFakettp(GlobalConfig.Port)
@@ -91,7 +95,7 @@ func startFakettp(port int) {
 	}
 }
 
-func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int) *Config {
+func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, IsRegex bool) *Config {
 	config := &Config{}
 	// config.Fakes = []*Fake{}
 
@@ -134,6 +138,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseBody = ResponseBody
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
+		fake.IsRegex = IsRegex
 		config.Fakes = append(config.Fakes, fake)
 	}
 
@@ -150,7 +155,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("new request %s %s", r.Method, r.RequestURI)
 
 	for _, fake := range GlobalConfig.Fakes {
-		if willHyjack(r.Method, fake.Methods, r.URL.Path, fake.HyjackPath) {
+		if willHyjack(r.Method, fake.Methods, r.URL.Path, fake.HyjackPath, fake.IsRegex) {
 			log.Printf("hyjacking route %s (waiting %s)", fake.HyjackPath, fake.ResponseTime.String())
 			if fake.ResponseTime > 0 {
 				<-time.Tick(fake.ResponseTime)
@@ -203,23 +208,33 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 // willHyjack returns true when we have a hyjack route that matches our request path,
 // and takes into account the methods we want to hyjack
-func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string) bool {
-	isHyjack := false
+func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string, isRegex bool) bool {
+	methodMatches := false
+	routeMatches := false
 
-	if hyjackRoute != "" {
-		if len(hyjackMethods) == 0 {
-			if hyjackRoute == requestPath {
-				isHyjack = true
+	if hyjackRoute == "" {
+		routeMatches = true
+	} else {
+		if isRegex {
+			var regex = regexp.MustCompile(hyjackRoute)
+			if regex.MatchString(requestPath) {
+				routeMatches = true
 			}
-		}
-		for _, method := range hyjackMethods {
-			if strings.ToUpper(method) == strings.ToUpper(requestMethod) && hyjackRoute == requestPath {
-				isHyjack = true
-			}
+		} else if hyjackRoute == requestPath {
+			routeMatches = true
 		}
 	}
 
-	return isHyjack
+	if len(hyjackMethods) == 0 {
+		methodMatches = true
+	}
+	for _, method := range hyjackMethods {
+		if strings.ToUpper(method) == strings.ToUpper(requestMethod) {
+			methodMatches = true
+		}
+	}
+
+	return methodMatches && routeMatches
 }
 
 // String adheres to the flag Var interface

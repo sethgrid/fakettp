@@ -16,8 +16,9 @@ func TestConfigFromFile(t *testing.T) {
 	var HyjackPath string
 	var ProxyHost string
 	var ProxyPort int
+	var IsRegex bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 
 	// top level config values
 	if got, want := C.Port, 5000; got != want {
@@ -103,9 +104,10 @@ func TestConfigFromParameters(t *testing.T) {
 	var HyjackPath string = "/api/functions.json"
 	var ProxyHost string = "apid.docker"
 	var ProxyPort int = 9092
+	var IsRegex bool
 
 	emptyConfigData := []byte{}
-	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 
 	// top level config values
 	if got, want := C.Port, 5000; got != want {
@@ -169,8 +171,9 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 	var HyjackPath string = "/api/functions.json"
 	var ProxyHost string = "apid2.docker"
 	var ProxyPort int = 9093
+	var IsRegex bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 
 	// top level config values, config data overridden by parameters
 	if got, want := C.Port, 5001; got != want {

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,9 +20,10 @@ func (m *testMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 var enableTestLogs = flag.Bool("show_logs", false, "`go test -show_logs` will enable application logging")
+var serversStarted bool
 
-// TestHyjackAndProxy, not concurrent test safe (use of hard coded ports and a global variable)
-func TestHyjackAndProxy(t *testing.T) {
+// defaultHyjackTestSetup() is not concurrent test safe (use of hard coded ports and a global variable)
+func defaultHyjackTestSetup() {
 	if !*enableTestLogs {
 		log.SetOutput(ioutil.Discard)
 	}
@@ -36,23 +38,32 @@ func TestHyjackAndProxy(t *testing.T) {
 	var HyjackPath string = "/bar"
 	var ProxyHost string = "127.0.0.1"
 	var ProxyPort int = 4332
+	var IsRegex bool
 
-	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort)
+	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 
-	// start fakettp proxy and backing server
-	go startFakettp(GlobalConfig.Port)
-	go func() {
-		err := http.ListenAndServe(fmt.Sprintf(":%d", ProxyPort), &testMux{})
-		if err != nil {
-			t.Fatalf("error creating backing server for hyjack and proxy test - %v", err)
-		}
-	}()
+	if !serversStarted {
+		// start fakettp proxy and backing server
+		go startFakettp(GlobalConfig.Port)
+		go func() {
+			err := http.ListenAndServe(fmt.Sprintf(":%d", ProxyPort), &testMux{})
+			if err != nil {
+				fmt.Printf("error creating backing server for hyjack and proxy test - %v", err)
+				os.Exit(1)
+			}
+		}()
+		serversStarted = true
+	}
 	// give the services time to start
 	time.Tick(150 * time.Millisecond)
+}
+
+func TestBackingServerSetup(t *testing.T) {
+	defaultHyjackTestSetup()
 
 	t.Log(">> verify requests to backing server work")
 	{
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/foo", ProxyHost, ProxyPort))
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/foo", GlobalConfig.ProxyHost, GlobalConfig.ProxyPort))
 		if err != nil {
 			t.Fatalf("error getting url from backing service - %v", err)
 		}
@@ -60,23 +71,28 @@ func TestHyjackAndProxy(t *testing.T) {
 		body, _ := ioutil.ReadAll(resp.Body)
 		// while the response says "proxied", it is actually just a direct call
 		if got, want := string(body), "proxied"; got != want {
-			t.Errorf("got body:\n%s\nwant body:\n%s\n`", got, want)
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
 	}
+}
 
+func TestProxySetup(t *testing.T) {
+	defaultHyjackTestSetup()
 	t.Log(">> verify requests can be proxied")
 	{
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/foo", ProxyPort))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/foo", GlobalConfig.ProxyPort))
 		if err != nil {
 			t.Fatalf("error getting url from proxy service - %v", err)
 		}
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
 		if got, want := string(body), "proxied"; got != want {
-			t.Errorf("got body:\n%s\nwant body:\n%s\n`", got, want)
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
 	}
-
+}
+func TestHyjacking(t *testing.T) {
+	defaultHyjackTestSetup()
 	t.Log(">> verify requests can be hyjacked")
 	{
 		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port))
@@ -86,7 +102,7 @@ func TestHyjackAndProxy(t *testing.T) {
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
 		if got, want := string(body), `hyjacked`; got != want {
-			t.Errorf("got body:\n%s\nwant body:\n%s\n`", got, want)
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
 		if got, want := resp.StatusCode, http.StatusTeapot; got != want {
 			t.Errorf("got status code %d, want %d", got, want)
@@ -95,7 +111,9 @@ func TestHyjackAndProxy(t *testing.T) {
 			t.Errorf("got value for header Cache-Control `%s`, want `%s`", got, want)
 		}
 	}
-
+}
+func TestProxyBasedOnMethod(t *testing.T) {
+	defaultHyjackTestSetup()
 	t.Log(">> verify that only methods specified are hyjacked")
 	{
 		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader(""))
@@ -105,7 +123,25 @@ func TestHyjackAndProxy(t *testing.T) {
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
 		if got, want := string(body), `proxied`; got != want {
-			t.Errorf("got body:\n%s\nwant body:\n%s\n`", got, want)
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+		}
+	}
+}
+func TestPatternMatching(t *testing.T) {
+	defaultHyjackTestSetup()
+	t.Log(">> verify requests can be hyjacked using pattern matching routes")
+	{
+		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].HyjackPath = `\/api\/users\/[0-9]+\/credits.json`
+		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].IsRegex = true
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/users/1234/credits.json", GlobalConfig.Port))
+		if err != nil {
+			t.Fatalf("error getting url from proxy service - %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		if got, want := string(body), `hyjacked`; got != want {
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
 	}
 }
