@@ -58,7 +58,7 @@ func main() {
 
 	flag.StringVar(&ConfigPath, "config", "", "json formatted conf file (see README at github.com/sethgrid/fakettp). If this flag is used, no other flags will be recognized.")
 
-	flag.IntVar(&Port, "port", 5000, "set the port on which to listen")
+	flag.IntVar(&Port, "port", 0, "set the port on which to listen")
 	flag.IntVar(&ResponseCode, "code", 200, "set the http status code with which to respond")
 	flag.DurationVar(&ResponseTime, "time", time.Millisecond*10, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
@@ -97,12 +97,11 @@ func startFakettp(port int) {
 
 func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, IsRegex bool) *Config {
 	config := &Config{}
-	// config.Fakes = []*Fake{}
 
 	if len(ConfigData) != 0 {
 		err := json.Unmarshal(ConfigData, &config)
 		if err != nil {
-			log.Fatalf("%v", err)
+			log.Fatalf("parsing json error - %v", err)
 		}
 
 		// set all the response times from config file string to time.Duration
@@ -112,7 +111,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 			}
 			d, err := time.ParseDuration(fake.ResponseTimeRaw)
 			if err != nil {
-				log.Fatalf("%v", err)
+				log.Fatalf("converting string delay to time duration - %v", err)
 			}
 			fake.ResponseTime = d
 		}
@@ -121,6 +120,8 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 	// if we had command line values, use those too (override port and proxy settings)
 	if Port != 0 {
 		config.Port = Port
+	} else if Port == 0 && config.Port == 0 {
+		config.Port = 5000
 	}
 	if ProxyHost != "" {
 		config.ProxyHost = ProxyHost

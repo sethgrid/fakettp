@@ -21,7 +21,7 @@ func TestConfigFromFile(t *testing.T) {
 	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
 
 	// top level config values
-	if got, want := C.Port, 5000; got != want {
+	if got, want := C.Port, 5002; got != want {
 		t.Error("got port %d, want %d", got, want)
 	}
 	if got, want := C.ProxyHost, "apid.docker"; got != want {
@@ -255,7 +255,7 @@ func getSampleConfig() []byte {
 	return []byte(`{
     "proxy_host": "apid.docker",
     "proxy_port": 9092,
-    "port": 5000,
+    "port": 5002,
     "fakes": [
         {
             "hyjack": "/api/settings.json",
