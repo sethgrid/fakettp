@@ -35,6 +35,24 @@ type Fake struct {
 	ResponseTime    time.Duration
 }
 
+func (f *Fake) String() string {
+	var methods string
+	if len(f.Methods) == 0 {
+		methods = "[ALL METHODS]"
+	} else {
+		methods = fmt.Sprintf("%v", f.Methods)
+	}
+
+	var path string
+	if len(f.HyjackPath) == 0 {
+		path = "all paths"
+	} else {
+		path = f.HyjackPath
+	}
+
+	return fmt.Sprintf("fake: %s %s -> code %d, headers %v, time %s, body `%s`", methods, path, f.ResponseCode, f.ResponseHeaders, f.ResponseTime.String(), f.ResponseBody)
+}
+
 var GlobalConfig *Config
 
 func init() {
@@ -106,6 +124,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 
 		// set all the response times from config file string to time.Duration
 		for _, fake := range config.Fakes {
+			log.Printf("creating hyjack %s", fake)
 			if fake.ResponseTimeRaw == "" {
 				continue
 			}
@@ -130,8 +149,8 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		config.ProxyPort = ProxyPort
 	}
 
-	// if there is data for a fake, grab it
-	if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
+	if len(config.Fakes) > 0 && HyjackPath != "" {
+		// if we are hyjacking a path beyond the config
 		fake := &Fake{}
 		fake.ResponseHeaders = ResponseHeaders
 		fake.HyjackPath = HyjackPath
@@ -140,6 +159,19 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
 		fake.IsRegex = IsRegex
+		config.Fakes = append(config.Fakes, fake)
+
+	} else if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
+		// no config fakes; if we have any parameters, let's use them
+		fake := &Fake{}
+		fake.ResponseHeaders = ResponseHeaders
+		fake.HyjackPath = HyjackPath
+		fake.Methods = Methods
+		fake.ResponseBody = ResponseBody
+		fake.ResponseCode = ResponseCode
+		fake.ResponseTime = ResponseTime
+		fake.IsRegex = IsRegex
+		log.Printf("creating hyjack %s", fake)
 		config.Fakes = append(config.Fakes, fake)
 	}
 
