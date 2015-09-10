@@ -6,6 +6,8 @@ import (
 )
 
 func TestConfigFromFile(t *testing.T) {
+	defaultHyjackTestSetup()
+
 	// flag parameters
 	var Port int
 	var ResponseCode int
@@ -16,9 +18,10 @@ func TestConfigFromFile(t *testing.T) {
 	var HyjackPath string
 	var ProxyHost string
 	var ProxyPort int
+	var ProxyDelayTime time.Duration
 	var IsRegex bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
 
 	// top level config values
 	if got, want := C.Port, 5002; got != want {
@@ -29,6 +32,9 @@ func TestConfigFromFile(t *testing.T) {
 	}
 	if got, want := C.ProxyPort, 9092; got != want {
 		t.Error("got proxy port %d, want %d", got, want)
+	}
+	if got, want := C.ProxyDelayTime, time.Millisecond*3; got != want {
+		t.Error("got delay time of %s, want %s", got.String(), want.String())
 	}
 
 	// fakes
@@ -94,6 +100,8 @@ func TestConfigFromFile(t *testing.T) {
 }
 
 func TestConfigFromParameters(t *testing.T) {
+	defaultHyjackTestSetup()
+
 	// flag parameters
 	var Port int = 5000
 	var ResponseCode int = 201
@@ -104,10 +112,11 @@ func TestConfigFromParameters(t *testing.T) {
 	var HyjackPath string = "/api/functions.json"
 	var ProxyHost string = "apid.docker"
 	var ProxyPort int = 9092
+	var ProxyDelayTime time.Duration
 	var IsRegex bool
 
 	emptyConfigData := []byte{}
-	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
+	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
 
 	// top level config values
 	if got, want := C.Port, 5000; got != want {
@@ -161,6 +170,8 @@ func TestConfigFromParameters(t *testing.T) {
 }
 
 func TestConfigFromFileAndParameters(t *testing.T) {
+	defaultHyjackTestSetup()
+
 	// flag parameters
 	var Port int = 5001
 	var ResponseCode int = 201
@@ -171,9 +182,10 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 	var HyjackPath string = "/api/functions.json"
 	var ProxyHost string = "apid2.docker"
 	var ProxyPort int = 9093
+	var ProxyDelayTime time.Duration
 	var IsRegex bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
 
 	// top level config values, config data overridden by parameters
 	if got, want := C.Port, 5001; got != want {
@@ -255,6 +267,7 @@ func getSampleConfig() []byte {
 	return []byte(`{
     "proxy_host": "apid.docker",
     "proxy_port": 9092,
+    "proxy_delay": "3ms",
     "port": 5002,
     "fakes": [
         {

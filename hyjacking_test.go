@@ -38,9 +38,10 @@ func defaultHyjackTestSetup() {
 	var HyjackPath string = "/bar"
 	var ProxyHost string = "127.0.0.1"
 	var ProxyPort int = 4332
+	var ProxyDelayTime time.Duration
 	var IsRegex bool
 
-	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
+	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
 
 	if !serversStarted {
 		// start fakettp proxy and backing server

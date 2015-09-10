@@ -26,9 +26,9 @@ Hyjac a single endpoint and proxy all other calls:
 go run main.go -proxy_host http://example.com -proxy_port 9092 -hyjack /api/user -port 5555 -code 418 -body "I'm a teapot"
 ```
 
-We can also use a config file instead (more on this below!):
+We can also use a config file instead (more on this below!) and override proxy settings with flags (or add an additional hyjacked route):
 ```
-go run main.go -config my.conf
+go run main.go -config my.conf -proxy_delay 5s
 ```
 
 We can match against regular expressions / patterns:
@@ -74,6 +74,7 @@ Sample Config:
 {
     "proxy_host": "http://0.0.0.0",
     "proxy_port": 9092,
+    "proxy_delay": "2s",
     "port": 5000,
     "fakes": [
         {

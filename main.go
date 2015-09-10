@@ -18,10 +18,12 @@ import (
 type StringSlice []string
 
 type Config struct {
-	ProxyHost string  `json:"proxy_host"`
-	ProxyPort int     `json:"proxy_port"`
-	Port      int     `json:"port"`
-	Fakes     []*Fake `json:"fakes"`
+	ProxyHost      string  `json:"proxy_host"`
+	ProxyPort      int     `json:"proxy_port"`
+	Port           int     `json:"port"`
+	Fakes          []*Fake `json:"fakes"`
+	ProxyDelayRaw  string  `json:"proxy_delay"`
+	ProxyDelayTime time.Duration
 }
 
 type Fake struct {
@@ -73,20 +75,22 @@ func main() {
 	var HyjackPath string
 	var ProxyHost string
 	var ProxyPort int
+	var ProxyDelayTime time.Duration
 
 	flag.StringVar(&ConfigPath, "config", "", "json formatted conf file (see README at github.com/sethgrid/fakettp). If this flag is used, no other flags will be recognized.")
 
 	flag.IntVar(&Port, "port", 0, "set the port on which to listen")
-	flag.IntVar(&ResponseCode, "code", 200, "set the http status code with which to respond")
-	flag.DurationVar(&ResponseTime, "time", time.Millisecond*10, "set the response time, ex: 250ms or 1m5s")
+	flag.IntVar(&ResponseCode, "code", 0, "set the http status code with which to respond")
+	flag.DurationVar(&ResponseTime, "time", time.Millisecond*0, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
 	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
 	flag.BoolVar(&IsRegex, "pattern_match", false, "set to true to match route patterns with Go regular expressions")
 	flag.Var(&Methods, "method", "used with the -hyjack route to limit hyjacking to the given http verb. Multiple -method parameters allowed.")
 
 	flag.StringVar(&HyjackPath, "hyjack", "", "set the route you wish to hijack if using the reverse proxy host and port")
-	flag.StringVar(&ProxyHost, "proxy_host", "http://0.0.0.0", "the host we will reverse proxy to (include protocol)")
+	flag.StringVar(&ProxyHost, "proxy_host", "", "the host we will reverse proxy to (include protocol)")
 	flag.IntVar(&ProxyPort, "proxy_port", 0, "the proxy port")
+	flag.DurationVar(&ProxyDelayTime, "proxy_delay", time.Millisecond*0, "set the response time for proxied endpoints, ex: 250ms or 1m5s")
 	flag.Parse()
 
 	ConfigData := []byte{}
@@ -99,7 +103,7 @@ func main() {
 		}
 	}
 
-	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, IsRegex)
+	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
 	log.Printf("starting on port :%d", GlobalConfig.Port)
 
 	startFakettp(GlobalConfig.Port)
@@ -113,13 +117,21 @@ func startFakettp(port int) {
 	}
 }
 
-func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, IsRegex bool) *Config {
+func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, ProxyDelayTime time.Duration, IsRegex bool) *Config {
 	config := &Config{}
 
 	if len(ConfigData) != 0 {
 		err := json.Unmarshal(ConfigData, &config)
 		if err != nil {
 			log.Fatalf("parsing json error - %v", err)
+		}
+
+		if config.ProxyDelayRaw != "" {
+			d, err := time.ParseDuration(config.ProxyDelayRaw)
+			if err != nil {
+				log.Fatalf("converting string delay to time duration - %v", err)
+			}
+			config.ProxyDelayTime = d
 		}
 
 		// set all the response times from config file string to time.Duration
@@ -148,8 +160,12 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 	if ProxyPort != 0 {
 		config.ProxyPort = ProxyPort
 	}
+	if ProxyDelayTime != 0 {
+		config.ProxyDelayTime = ProxyDelayTime
+	}
 
 	if len(config.Fakes) > 0 && HyjackPath != "" {
+		log.Println("appending fake based on parameters")
 		// if we are hyjacking a path beyond the config
 		fake := &Fake{}
 		fake.ResponseHeaders = ResponseHeaders
@@ -163,6 +179,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 
 	} else if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
 		// no config fakes; if we have any parameters, let's use them
+		log.Println("creating fake based on parameters")
 		fake := &Fake{}
 		fake.ResponseHeaders = ResponseHeaders
 		fake.HyjackPath = HyjackPath
@@ -212,6 +229,11 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// not hyjacking this time
 	log.Println("proxying request")
+
+	if GlobalConfig.ProxyDelayTime > 0 {
+		log.Printf("delaying proxy request %s", GlobalConfig.ProxyDelayTime.String())
+		<-time.Tick(GlobalConfig.ProxyDelayTime)
+	}
 
 	director := func(req *http.Request) {
 		// handle both cases where we got `http://hostname` or `hostname`
