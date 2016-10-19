@@ -10,6 +10,12 @@ Fakettp is an http debugging proxy allowing you to easily black box test how an 
 
 You can set global responses, or you can pass in individual endpoints where those responses apply, and proxy all other endpoint requests to the original service. This gives you the ability to test your system against the other service and simulate an error on a single endpoint while the rest of the service works normally.
 
+How To Install
+--------
+```bash
+go get github.com/sethgrid/fakettp
+```
+
 Use Case
 --------
 
@@ -34,6 +40,11 @@ go run main.go -config my.conf -proxy_delay 5s
 We can match against regular expressions / patterns:
 ```
 $ go run main.go -port 5555 -code 201 -header POST -pattern_match -hyjack '\/api\/users\/[0-9]+\/credits.json'
+```
+
+We can use raw query including query params:
+```
+$ go run main.go -port 5555 -code 201 -header POST -pattern_match -request_uri -hyjack '\/api\/users\/[0-9]+\/credits.json\?foo=bar'
 ```
 
 Return the same data for all calls to this service:
@@ -100,8 +111,37 @@ Sample Config:
             "code": 404,
             "pattern_match": true
         },
+        {
+            "hyjack": "\/api\/users\/[0-9]+\/credits.json\\?foo=bar",
+            "code": 404,
+            "pattern_match": true,
+            "request_uri": true
+        }
     ]
 }
+```
+
+Docker Use Cases
+-----------
+You can also use this in docker-compose like so,
+
+```yaml
+# fakettp: hijack certain HTTP routes / methods
+# for instance, below command will hijack all DELETE calls and return 400, passing everything else to ceph-demo.dfs.docker
+# command: fakettp -proxy_host ceph-demo.dfs.docker -proxy_port 80 -port 80 -method DELETE -code 400 -body ""
+# you can also use volume mount to use a json config directly
+
+fakettp:
+  image: docker.sendgrid.net/sethgrid/fakettp
+  command: fakettp -config /mount/fakettp.json
+  links:
+    - ceph-demo
+  dns:
+    - 172.17.0.1
+  dns_search:
+    - dfs.docker
+  volumes:
+    - .:/mount
 ```
 
 Sample Logs
