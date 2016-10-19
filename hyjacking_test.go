@@ -40,8 +40,9 @@ func defaultHyjackTestSetup() {
 	var ProxyPort int = 4332
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
+	var UseRequestURI bool
 
-	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
+	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	if !serversStarted {
 		// start fakettp proxy and backing server
@@ -136,6 +137,26 @@ func TestPatternMatching(t *testing.T) {
 		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].IsRegex = true
 
 		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/users/1234/credits.json", GlobalConfig.Port))
+		if err != nil {
+			t.Fatalf("error getting url from proxy service - %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		if got, want := string(body), `hyjacked`; got != want {
+			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+		}
+	}
+}
+
+func TestRequestURI(t *testing.T) {
+	defaultHyjackTestSetup()
+	t.Log(">> verify requests can be hyjacked using query param")
+	{
+		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].HyjackPath = `\/api\/users\/[0-9]+\/credits\.json\?foo`
+		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].IsRegex = true
+		GlobalConfig.Fakes[len(GlobalConfig.Fakes)-1].UseRequestURI = true
+
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/users/1234/credits.json?foo", GlobalConfig.Port))
 		if err != nil {
 			t.Fatalf("error getting url from proxy service - %v", err)
 		}

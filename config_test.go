@@ -20,8 +20,9 @@ func TestConfigFromFile(t *testing.T) {
 	var ProxyPort int
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
+	var UseRequestURI bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values
 	if got, want := C.Port, 5002; got != want {
@@ -114,9 +115,10 @@ func TestConfigFromParameters(t *testing.T) {
 	var ProxyPort int = 9092
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
+	var UseRequestURI bool
 
 	emptyConfigData := []byte{}
-	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
+	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values
 	if got, want := C.Port, 5000; got != want {
@@ -184,8 +186,9 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 	var ProxyPort int = 9093
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
+	var UseRequestURI bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values, config data overridden by parameters
 	if got, want := C.Port, 5001; got != want {

@@ -34,6 +34,7 @@ type Fake struct {
 	ResponseHeaders StringSlice `json:"headers"`
 	ResponseTimeRaw string      `json:"time"`
 	IsRegex         bool        `json:"pattern_match"`
+	UseRequestURI   bool        `json:"request_uri"`
 	ResponseTime    time.Duration
 }
 
@@ -71,6 +72,7 @@ func main() {
 	var ResponseHeaders StringSlice
 	var Methods StringSlice
 	var IsRegex bool
+	var UseRequestURI bool
 
 	var HyjackPath string
 	var ProxyHost string
@@ -85,6 +87,7 @@ func main() {
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
 	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
 	flag.BoolVar(&IsRegex, "pattern_match", false, "set to true to match route patterns with Go regular expressions")
+	flag.BoolVar(&UseRequestURI, "request_uri", false, "set to true to match on raw query (including query params)")
 	flag.Var(&Methods, "method", "used with the -hyjack route to limit hyjacking to the given http verb. Multiple -method parameters allowed.")
 
 	flag.StringVar(&HyjackPath, "hyjack", "", "set the route you wish to hijack if using the reverse proxy host and port")
@@ -103,7 +106,7 @@ func main() {
 		}
 	}
 
-	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex)
+	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 	log.Printf("starting on port :%d", GlobalConfig.Port)
 
 	startFakettp(GlobalConfig.Port)
@@ -117,7 +120,7 @@ func startFakettp(port int) {
 	}
 }
 
-func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, ProxyDelayTime time.Duration, IsRegex bool) *Config {
+func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, ProxyDelayTime time.Duration, IsRegex, UseRequestURI bool) *Config {
 	config := &Config{}
 
 	if len(ConfigData) != 0 {
@@ -175,6 +178,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
 		fake.IsRegex = IsRegex
+		fake.UseRequestURI = UseRequestURI
 		config.Fakes = append(config.Fakes, fake)
 
 	} else if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
@@ -188,6 +192,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
 		fake.IsRegex = IsRegex
+		fake.UseRequestURI = UseRequestURI
 		log.Printf("creating hyjack %s", fake)
 		config.Fakes = append(config.Fakes, fake)
 	}
@@ -205,7 +210,11 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("new request %s %s", r.Method, r.RequestURI)
 
 	for _, fake := range GlobalConfig.Fakes {
-		if willHyjack(r.Method, fake.Methods, r.URL.Path, fake.HyjackPath, fake.IsRegex) {
+		pathToMatch := r.URL.Path
+		if fake.UseRequestURI {
+			pathToMatch = r.RequestURI
+		}
+		if willHyjack(r.Method, fake.Methods, pathToMatch, fake.HyjackPath, fake.IsRegex) {
 			log.Printf("hyjacking route %s (waiting %s)", fake.HyjackPath, fake.ResponseTime.String())
 			if fake.ResponseTime > 0 {
 				<-time.Tick(fake.ResponseTime)
