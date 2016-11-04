@@ -167,6 +167,11 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		config.ProxyDelayTime = ProxyDelayTime
 	}
 
+	// other rules on config
+	if config.ProxyPort == 0 && config.Port != 0 {
+		config.ProxyPort = config.Port
+	}
+
 	if len(config.Fakes) > 0 && HyjackPath != "" {
 		log.Println("appending fake based on parameters")
 		// if we are hyjacking a path beyond the config
