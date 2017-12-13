@@ -12,13 +12,6 @@ import (
 	"time"
 )
 
-// testMux is for a backing service to show that proxying works
-type testMux struct{}
-
-func (m *testMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte("proxied"))
-}
-
 var enableTestLogs = flag.Bool("show_logs", false, "`go test -show_logs` will enable application logging")
 var serversStarted bool
 
@@ -44,11 +37,17 @@ func defaultHyjackTestSetup() {
 
 	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
+	// make sure only one receiving server starts
 	if !serversStarted {
 		// start fakettp proxy and backing server
 		go startFakettp(GlobalConfig.Port)
 		go func() {
-			err := http.ListenAndServe(fmt.Sprintf(":%d", ProxyPort), &testMux{})
+			// backing service to show proxying working. Use root to catch all potential paths
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("proxied"))
+			})
+			err := http.ListenAndServe(fmt.Sprintf(":%d", ProxyPort), mux)
 			if err != nil {
 				fmt.Printf("error creating backing server for hyjack and proxy test - %v", err)
 				os.Exit(1)
@@ -116,6 +115,7 @@ func TestHyjacking(t *testing.T) {
 }
 func TestProxyBasedOnMethod(t *testing.T) {
 	defaultHyjackTestSetup()
+
 	t.Log(">> verify that only methods specified are hyjacked")
 	{
 		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader(""))
@@ -124,8 +124,13 @@ func TestProxyBasedOnMethod(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		body, _ := ioutil.ReadAll(resp.Body)
+
 		if got, want := string(body), `proxied`; got != want {
 			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+		}
+
+		if got, want := resp.StatusCode, http.StatusOK; got != want {
+			t.Errorf("got status %d (%s), want %d", got, http.StatusText(got), want)
 		}
 	}
 }
@@ -166,4 +171,8 @@ func TestRequestURI(t *testing.T) {
 			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
 	}
+}
+
+func TestRequestBodyJSON(t *testing.T) {
+
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -24,6 +25,14 @@ type Config struct {
 	Fakes          []*Fake `json:"fakes"`
 	ProxyDelayRaw  string  `json:"proxy_delay"`
 	ProxyDelayTime time.Duration
+}
+
+func (c *Config) String() string {
+	fakes := []string{"Fakes:"}
+	for _, fake := range c.Fakes {
+		fakes = append(fakes, fake.String())
+	}
+	return fmt.Sprintf("Proxy Addr: %s:%d; Delay: %s, %s", c.ProxyHost, c.ProxyPort, c.ProxyDelayTime.String(), strings.Join(fakes, "\n > "))
 }
 
 type Fake struct {
@@ -212,6 +221,13 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	reqID := fmt.Sprintf("[%07x] ", rand.Int31n(1e8))
 	log.SetPrefix(reqID)
 
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered in default handler in proxy", r)
+			fmt.Printf("%s", debug.Stack())
+		}
+	}()
+
 	log.Printf("new request %s %s", r.Method, r.RequestURI)
 
 	for _, fake := range GlobalConfig.Fakes {
@@ -249,29 +265,32 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		<-time.Tick(GlobalConfig.ProxyDelayTime)
 	}
 
-	director := func(req *http.Request) {
-		// handle both cases where we got `http://hostname` or `hostname`
-		parts := strings.Split(GlobalConfig.ProxyHost, "://")
-		var scheme string
-		var host string
-		if len(parts) == 1 {
-			scheme = "http"
-			host = fmt.Sprintf("%s:%d", parts[0], GlobalConfig.ProxyPort)
-		} else if len(parts) >= 2 {
-			scheme = parts[0]
-			host = fmt.Sprintf("%s:%d", parts[1], GlobalConfig.ProxyPort)
-		} else {
-			log.Printf("issue splitting host on :// - %s", GlobalConfig.ProxyHost)
-			return
-		}
-
-		req = r
-		req.URL.Scheme = scheme
-		req.URL.Host = host
+	// make sure scheme and host are set for request proxy
+	parts := strings.Split(GlobalConfig.ProxyHost, "://")
+	var scheme string
+	var host string
+	if len(parts) == 1 {
+		scheme = "http"
+		host = fmt.Sprintf("%s:%d", parts[0], GlobalConfig.ProxyPort)
+	} else if len(parts) >= 2 {
+		scheme = parts[0]
+		host = fmt.Sprintf("%s:%d", parts[1], GlobalConfig.ProxyPort)
+	} else {
+		log.Printf("issue splitting host on :// - %s", GlobalConfig.ProxyHost)
+		return
 	}
 
-	proxy := &httputil.ReverseProxy{Director: director}
+	if scheme == "" {
+		scheme = "http"
+	}
+
+	req := r
+	req.URL.Scheme = scheme
+	req.URL.Host = host
+
+	proxy := httputil.NewSingleHostReverseProxy(req.URL)
 	proxy.ServeHTTP(w, r)
+
 	log.Printf("proxy request complete")
 }
 
@@ -280,6 +299,8 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string, isRegex bool) bool {
 	methodMatches := false
 	routeMatches := false
+
+	// fmt.Printf("\n\nhijack? requestMethod %v, hyjackMethods %v, requestPath %v, hyjackRoute %v, isRegex %v", requestMethod, hyjackMethods, requestPath, hyjackRoute, isRegex)
 
 	if hyjackRoute == "" {
 		routeMatches = true
