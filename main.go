@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,15 +29,16 @@ type Config struct {
 }
 
 type Fake struct {
-	HyjackPath      string      `json:"hyjack"`
-	Methods         StringSlice `json:"methods"`
-	ResponseBody    string      `json:"body"`
-	ResponseCode    int         `json:"code"`
-	ResponseHeaders StringSlice `json:"headers"`
-	ResponseTimeRaw string      `json:"time"`
-	IsRegex         bool        `json:"pattern_match"`
-	UseRequestURI   bool        `json:"request_uri"`
-	ResponseTime    time.Duration
+	HyjackPath        string      `json:"hyjack"`
+	Methods           StringSlice `json:"methods"`
+	RequestBodySubStr string      `json:"requestBody"`
+	ResponseBody      string      `json:"body"`
+	ResponseCode      int         `json:"code"`
+	ResponseHeaders   StringSlice `json:"headers"`
+	ResponseTimeRaw   string      `json:"time"`
+	IsRegex           bool        `json:"pattern_match"`
+	UseRequestURI     bool        `json:"request_uri"`
+	ResponseTime      time.Duration
 }
 
 func (f *Fake) String() string {
@@ -214,12 +217,92 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("new request %s %s", r.Method, r.RequestURI)
 
+	// there are two ways that a request gets hyjacked:
+	// 1 - X-Return-* header
+	// 2 - Config
+	// An X-Return-* header always overrides config.
+	requestHyjacked := false
+	var delay time.Duration
+	var code int
+	var headers http.Header
+	var data []byte
+	var err error
+
+	if hdr := r.Header.Get("X-Return-Delay"); hdr != "" {
+		delay, err = time.ParseDuration(hdr)
+		if err != nil {
+			log.Println("cannot set delay", err)
+		}
+	}
+
+	// respect config delay if it was not set by header
+	if delay == 0 && GlobalConfig.ProxyDelayTime > 0 {
+		delay = GlobalConfig.ProxyDelayTime
+	}
+
+	if hdr := r.Header.Get("X-Return-Headers"); hdr != "" {
+		requestHyjacked = true
+		err = json.Unmarshal([]byte(hdr), headers)
+		if err != nil {
+			// TODO: if not json, try to parse key:v\n (like how it is set in the config)
+			// if key:v, convert to var headers http.Header
+			requestHyjacked = false
+			log.Println("unable to read X-Return-Headers", err)
+		}
+	}
+	if hdr := r.Header.Get("X-Return-Code"); hdr != "" {
+		requestHyjacked = true
+		code, err = strconv.Atoi(hdr)
+		if err != nil {
+			requestHyjacked = false
+			log.Println("unable to read X-Return-Code", err)
+		}
+	}
+	if hdr := r.Header.Get("X-Return-Data"); hdr != "" {
+		requestHyjacked = true
+		data = []byte(hdr)
+	}
+	if requestHyjacked {
+		log.Printf("hyjacking request %s (waiting %s)", r.RequestURI, delay.String())
+		if code != 0 {
+			w.WriteHeader(code)
+		}
+		for name, values := range headers {
+			log.Printf("setting header %s:%s", name, strings.Join(values, ","))
+			w.Header().Set(name, strings.Join(values, ","))
+		}
+		time.Sleep(delay)
+		w.Write(data)
+		log.Println("hyjack request complete")
+		return
+	}
+
+	// If this request was not X-Return-* based, check config.
+	// Range over the configured fakes and determine if we
+	// should hyjack the route
 	for _, fake := range GlobalConfig.Fakes {
 		pathToMatch := r.URL.Path
 		if fake.UseRequestURI {
 			pathToMatch = r.RequestURI
 		}
-		if willHyjack(r.Method, fake.Methods, pathToMatch, fake.HyjackPath, fake.IsRegex) {
+
+		// extract the reqeust body, and put it back into the request.
+		var originalRequestBody []byte
+		var err error
+		if r.Body != nil {
+			originalRequestBody, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				// log
+			}
+			r.Body.Close()
+		}
+
+		// rehydrate the body (it is drained each read)
+		if len(originalRequestBody) > 0 {
+			r.Body = ioutil.NopCloser(bytes.NewBuffer(originalRequestBody))
+		}
+
+		if willHyjack(r.Method, fake.Methods, pathToMatch, fake.HyjackPath, string(originalRequestBody), fake.RequestBodySubStr, fake.IsRegex) {
 			log.Printf("hyjacking route %s (waiting %s)", fake.HyjackPath, fake.ResponseTime.String())
 			if fake.ResponseTime > 0 {
 				<-time.Tick(fake.ResponseTime)
@@ -244,9 +327,9 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	// not hyjacking this time
 	log.Println("proxying request")
 
-	if GlobalConfig.ProxyDelayTime > 0 {
-		log.Printf("delaying proxy request %s", GlobalConfig.ProxyDelayTime.String())
-		<-time.Tick(GlobalConfig.ProxyDelayTime)
+	if delay > 0 {
+		log.Printf("delaying proxy request %s", delay.String())
+		time.Sleep(delay)
 	}
 
 	director := func(req *http.Request) {
@@ -277,9 +360,10 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 // willHyjack returns true when we have a hyjack route that matches our request path,
 // and takes into account the methods we want to hyjack
-func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string, isRegex bool) bool {
+func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath string, hyjackRoute string, requestBody string, requestBodySubStr string, isRegex bool) bool {
 	methodMatches := false
 	routeMatches := false
+	requestBodyMatches := false
 
 	if hyjackRoute == "" {
 		routeMatches = true
@@ -294,6 +378,10 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 		}
 	}
 
+	if requestBodySubStr != "" && strings.Contains(requestBody, requestBodySubStr) {
+		requestBodyMatches = true
+	}
+
 	if len(hyjackMethods) == 0 {
 		methodMatches = true
 	}
@@ -303,7 +391,7 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 		}
 	}
 
-	return methodMatches && routeMatches
+	return (methodMatches && routeMatches) || (routeMatches && requestBodyMatches)
 }
 
 // String adheres to the flag Var interface
