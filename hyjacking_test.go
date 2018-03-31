@@ -30,14 +30,14 @@ func defaultHyjackTestSetup() {
 
 	// flag parameters
 	var Port = 4333
-	var ResponseCode int = http.StatusTeapot
+	var ResponseCode = http.StatusTeapot
 	var ResponseTime time.Duration
-	var ResponseBody string = "hyjacked"
-	var ResponseHeaders StringSlice = StringSlice{"Cache-Control: max-age=3600"}
-	var Methods StringSlice = StringSlice{"GET"}
-	var HyjackPath string = "/bar"
-	var ProxyHost string = "127.0.0.1"
-	var ProxyPort int = 4332
+	var ResponseBody = "hyjacked"
+	var ResponseHeaders = StringSlice{"Cache-Control: max-age=3600"}
+	var Methods = StringSlice{"GET"}
+	var HyjackPath = "/bar"
+	var ProxyHost = "127.0.0.1"
+	var ProxyPort = 4332
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
 	var UseRequestURI bool
@@ -116,9 +116,9 @@ func TestHyjacking(t *testing.T) {
 }
 func TestProxyBasedOnMethod(t *testing.T) {
 	defaultHyjackTestSetup()
-	t.Log(">> verify that only methods specified are hyjacked")
+	t.Log(">> verify that only methods specified are hyjacked (post is not specified, should be proxied)")
 	{
-		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader(""))
+		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader("body!"))
 		if err != nil {
 			t.Fatalf("error getting url from proxy service - %v", err)
 		}

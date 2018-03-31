@@ -186,7 +186,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.UseRequestURI = UseRequestURI
 		config.Fakes = append(config.Fakes, fake)
 
-	} else if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
+	} else if len(ResponseHeaders) != 0 || HyjackPath != "" || ResponseCode != 0 || ResponseTime != 0 || len(Methods) != 0 {
 		// no config fakes; if we have any parameters, let's use them
 		log.Println("creating fake based on parameters")
 		fake := &Fake{}
@@ -265,7 +265,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		req = r
+		log.Println("setting scheme as ", scheme)
 		req.URL.Scheme = scheme
 		req.URL.Host = host
 	}
