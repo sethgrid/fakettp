@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -37,7 +38,7 @@ func defaultHyjackTestSetup() {
 	var Methods = StringSlice{"GET"}
 	var RequestBodySubStr = ""
 	var HyjackPath = "/bar"
-	var ProxyHost = "127.0.0.1"
+	var ProxyHost = "0.0.0.0"
 	var ProxyPort = 4332
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
@@ -194,27 +195,31 @@ func TestPostBodyHyjacking(t *testing.T) {
 	if got, want := string(body), `proxied`; got != want {
 		t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 	}
+
 }
 
 func TestXReturnOverride(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	defaultHyjackTestSetup()
+	buf := &bytes.Buffer{}
+	log.SetOutput(buf)
 	t.Log(">> verify X-Return-* overrides exiting config")
-	// Near-duplicate of TestHyjacking
 	// Override an existing configured endpoint with X-Return-* values
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), nil)
 	if err != nil {
 		t.Fatalf("unable to set up request - %v", err)
 	}
-	req.Header.Add("X-Return-Code", "100")
-	req.Header.Add("X-Return-Body", "overridden")
+	req.Header.Add("X-Return-Code", "411")
+	req.Header.Add("X-Return-Data", "overridden")
 	req.Header.Add("X-Return-Headers", `{"X-Custom-Header":["custom value"]}`)
 	req.Header.Add("X-Return-Delay", "200ms")
-
+	cli := http.Client{}
+	cli.Timeout = 5 * time.Second
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cli.Do(req)
 	if err != nil {
-		t.Fatalf("error getting url from proxy service - %v", err)
+		t.Log(buf.String())
+		t.Fatalf("error performing HTTP request - %v", err)
 	}
 	defer resp.Body.Close()
 	// ensure we've waited the 200ms
@@ -225,7 +230,7 @@ func TestXReturnOverride(t *testing.T) {
 	if got, want := string(body), `overridden`; got != want {
 		t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 	}
-	if got, want := resp.StatusCode, 100; got != want {
+	if got, want := resp.StatusCode, 411; got != want {
 		t.Errorf("got status code %d, want %d", got, want)
 	}
 	if got, want := resp.Header.Get("X-Custom-Header"), "custom value"; got != want {

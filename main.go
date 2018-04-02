@@ -119,7 +119,7 @@ func main() {
 
 func startFakettp(port int) {
 	http.HandleFunc("/", defaultHandler)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", port), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -238,7 +238,6 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("cannot set delay", err)
 		}
 	}
-
 	// respect config delay if it was not set by header
 	if delay == 0 && GlobalConfig.ProxyDelayTime > 0 {
 		delay = GlobalConfig.ProxyDelayTime
@@ -246,12 +245,17 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 
 	if hdr := r.Header.Get("X-Return-Headers"); hdr != "" {
 		requestHyjacked = true
-		err = json.Unmarshal([]byte(hdr), headers)
+		err = json.Unmarshal([]byte(hdr), &headers)
 		if err != nil {
 			// TODO: if not json, try to parse key:v\n (like how it is set in the config)
 			// if key:v, convert to var headers http.Header
 			requestHyjacked = false
 			log.Println("unable to read X-Return-Headers", err)
+		}
+		for k, vs := range headers {
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
 		}
 	}
 	if hdr := r.Header.Get("X-Return-Code"); hdr != "" {
@@ -266,18 +270,17 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		requestHyjacked = true
 		data = []byte(hdr)
 	}
+
 	if requestHyjacked {
 		log.Printf("hyjacking request %s (waiting %s)", r.RequestURI, delay.String())
-		if code != 0 {
-			w.WriteHeader(code)
-		}
+		w.WriteHeader(code)
 		for name, values := range headers {
 			log.Printf("setting header %s:%s", name, strings.Join(values, ","))
 			w.Header().Set(name, strings.Join(values, ","))
 		}
 		time.Sleep(delay)
 		w.Write(data)
-		log.Println("hyjack request complete")
+		log.Println("hyjack X-Return-* request complete")
 		return
 	}
 
@@ -296,7 +299,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil {
 			originalRequestBody, err = ioutil.ReadAll(r.Body)
 			if err != nil {
-				// log
+				log.Printf("unable to read original request body - %v", err)
 			}
 			r.Body.Close()
 		}
@@ -404,7 +407,6 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 		return routeMatches && requestBodyMatches
 	}
 
-	// fmt.Printf("(%t && %t) || (%t && %t) = %t", methodMatches, routeMatches, routeMatches, requestBodyMatches, (methodMatches && routeMatches) || (routeMatches && requestBodyMatches))
 	return methodMatches && routeMatches
 }
 
