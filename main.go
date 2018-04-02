@@ -263,6 +263,10 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 			requestHyjacked = false
 			log.Println("unable to read X-Return-Code", err)
 		}
+		if code == 100 {
+			log.Println("code 100 hangs the stdlib. Adusting code to 101")
+			code++
+		}
 	}
 	if hdr := r.Header.Get("X-Return-Data"); hdr != "" {
 		requestHyjacked = true
