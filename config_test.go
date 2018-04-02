@@ -14,6 +14,7 @@ func TestConfigFromFile(t *testing.T) {
 	var ResponseTime time.Duration
 	var ResponseBody string
 	var ResponseHeaders StringSlice
+	var RequestBodySubStr string
 	var Methods StringSlice
 	var HyjackPath string
 	var ProxyHost string
@@ -22,7 +23,7 @@ func TestConfigFromFile(t *testing.T) {
 	var IsRegex bool
 	var UseRequestURI bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, RequestBodySubStr, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values
 	if got, want := C.Port, 5002; got != want {
@@ -39,7 +40,7 @@ func TestConfigFromFile(t *testing.T) {
 	}
 
 	// fakes
-	if got, want := len(C.Fakes), 2; got != want {
+	if got, want := len(C.Fakes), 3; got != want {
 		// must fatal to prevent nil reference panics below
 		t.Fatalf("got %d fakes, want %d", got, want)
 	}
@@ -110,6 +111,7 @@ func TestConfigFromParameters(t *testing.T) {
 	var ResponseBody = `{"json":true}`
 	var ResponseHeaders = StringSlice{"Content-Type: application/json", "Cache-Control: max-age=3600"}
 	var Methods = StringSlice{"GET", "POST"}
+	var RequestBodySubStr string
 	var HyjackPath = "/api/functions.json"
 	var ProxyHost = "apid.docker"
 	var ProxyPort = 9092
@@ -118,7 +120,7 @@ func TestConfigFromParameters(t *testing.T) {
 	var UseRequestURI bool
 
 	emptyConfigData := []byte{}
-	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
+	C := populateGlobalConfig(emptyConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, RequestBodySubStr, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values
 	if got, want := C.Port, 5000; got != want {
@@ -175,20 +177,21 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 	defaultHyjackTestSetup()
 
 	// flag parameters
-	var Port int = 5001
-	var ResponseCode int = 201
-	var ResponseTime time.Duration = time.Millisecond * 1015
-	var ResponseBody string = `{"json":true}`
-	var ResponseHeaders StringSlice = StringSlice{"Content-Type: application/json", "Cache-Control: max-age=3600"}
-	var Methods StringSlice = StringSlice{"GET", "POST"}
-	var HyjackPath string = "/api/functions.json"
-	var ProxyHost string = "apid2.docker"
-	var ProxyPort int = 9093
+	var Port = 5001
+	var ResponseCode = 201
+	var ResponseTime = time.Millisecond * 1015
+	var ResponseBody = `{"json":true}`
+	var ResponseHeaders = StringSlice{"Content-Type: application/json", "Cache-Control: max-age=3600"}
+	var RequestBodySubStr string
+	var Methods = StringSlice{"GET", "POST"}
+	var HyjackPath = "/api/functions.json"
+	var ProxyHost = "apid2.docker"
+	var ProxyPort = 9093
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
 	var UseRequestURI bool
 
-	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
+	C := populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, RequestBodySubStr, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	// top level config values, config data overridden by parameters
 	if got, want := C.Port, 5001; got != want {
@@ -203,7 +206,7 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 
 	// fakes
 	// get 2 from config and 1 from command line
-	if got, want := len(C.Fakes), 3; got != want {
+	if got, want := len(C.Fakes), 4; got != want {
 		// must fatal to prevent nil reference panics below
 		t.Fatalf("got %d fakes, want %d", got, want)
 	}
@@ -229,40 +232,58 @@ func TestConfigFromFileAndParameters(t *testing.T) {
 		t.Errorf("got resposne time %v, want %v", got, want)
 	}
 
-	// second and third fake
-	for i := 1; i <= 2; i++ {
-		if got, want := C.Fakes[i].HyjackPath, "/api/functions.json"; got != want {
-			t.Errorf("got hyjack path %s, want %s", got, want)
-		}
-		if got, want := len(C.Fakes[i].Methods), 2; got != want {
-			// must fatal to prevent nil reference panics below
-			t.Fatalf("got %d methods, want %d", got, want)
-		}
-		if got, want := C.Fakes[i].Methods[0], "GET"; got != want {
-			t.Errorf("got method %s, want %s", got, want)
-		}
-		if got, want := C.Fakes[i].Methods[1], "POST"; got != want {
-			t.Errorf("got method %s, want %s", got, want)
-		}
-		if got, want := C.Fakes[i].ResponseBody, `{"json":true}`; got != want {
-			t.Errorf("got body %s, want nothing", got)
-		}
-		if got, want := C.Fakes[i].ResponseCode, 201; got != want {
-			t.Errorf("got response code %d, want %d", got, want)
-		}
-		if got, want := len(C.Fakes[i].ResponseHeaders), 2; got != want {
-			// must fatal to prevent nil reverence panics below
-			t.Fatalf("got %d response headers, want %d", got, want)
-		}
-		if got, want := C.Fakes[i].ResponseHeaders[0], "Content-Type: application/json"; got != want {
-			t.Errorf("got header %s, want %s", got, want)
-		}
-		if got, want := C.Fakes[i].ResponseHeaders[1], "Cache-Control: max-age=3600"; got != want {
-			t.Errorf("got header %s, want %s", got, want)
-		}
-		if got, want := C.Fakes[i].ResponseTime, time.Millisecond*1015; got != want {
-			t.Errorf("got resposne time %v, want %v", got, want)
-		}
+	if got, want := C.Fakes[1].HyjackPath, "/api/functions.json"; got != want {
+		t.Errorf("got hyjack path %s, want %s", got, want)
+	}
+	if got, want := len(C.Fakes[1].Methods), 2; got != want {
+		// must fatal to prevent nil reference panics below
+		t.Fatalf("got %d methods, want %d", got, want)
+	}
+	if got, want := C.Fakes[1].Methods[0], "GET"; got != want {
+		t.Errorf("got method %s, want %s", got, want)
+	}
+	if got, want := C.Fakes[1].Methods[1], "POST"; got != want {
+		t.Errorf("got method %s, want %s", got, want)
+	}
+	if got, want := C.Fakes[1].ResponseBody, `{"json":true}`; got != want {
+		t.Errorf("got body %s, want nothing", got)
+	}
+	if got, want := C.Fakes[1].ResponseCode, 201; got != want {
+		t.Errorf("got response code %d, want %d", got, want)
+	}
+	if got, want := len(C.Fakes[1].ResponseHeaders), 2; got != want {
+		// must fatal to prevent nil reverence panics below
+		t.Fatalf("got %d response headers, want %d", got, want)
+	}
+	if got, want := C.Fakes[1].ResponseHeaders[0], "Content-Type: application/json"; got != want {
+		t.Errorf("got header %s, want %s", got, want)
+	}
+	if got, want := C.Fakes[1].ResponseHeaders[1], "Cache-Control: max-age=3600"; got != want {
+		t.Errorf("got header %s, want %s", got, want)
+	}
+	if got, want := C.Fakes[1].ResponseTime, time.Millisecond*1015; got != want {
+		t.Errorf("got resposne time %v, want %v", got, want)
+	}
+
+	if got, want := C.Fakes[2].HyjackPath, "/api/post"; got != want {
+		t.Errorf("got hyjack path %s, want %s", got, want)
+	}
+	if got, want := len(C.Fakes[2].Methods), 1; got != want {
+		// must fatal to prevent nil reference panics below
+		t.Fatalf("got %d methods, want %d", got, want)
+	}
+	if got, want := C.Fakes[2].Methods[0], "POST"; got != want {
+		t.Errorf("got method %s, want %s", got, want)
+	}
+	if got, want := C.Fakes[2].ResponseBody, `hyjacked`; got != want {
+		t.Errorf("got body %s, want nothing", got)
+	}
+	if got, want := C.Fakes[2].ResponseCode, 200; got != want {
+		t.Errorf("got response code %d, want %d", got, want)
+	}
+	if got, want := len(C.Fakes[2].ResponseHeaders), 0; got != want {
+		// must fatal to prevent nil reverence panics below
+		t.Fatalf("got %d response headers, want %d", got, want)
 	}
 }
 
@@ -290,7 +311,15 @@ func getSampleConfig() []byte {
                 "Cache-Control: max-age=3600"
             ],
             "time": "1s15ms"
-        }
+        },{
+			"hyjack": "/api/post",
+			"methods": [
+				"POST"
+			],
+			"code":200,
+			"body": "hyjacked",
+			"request_body": "catch me"
+		}
     ]
 }`)
 }

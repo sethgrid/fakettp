@@ -31,7 +31,7 @@ type Config struct {
 type Fake struct {
 	HyjackPath        string      `json:"hyjack"`
 	Methods           StringSlice `json:"methods"`
-	RequestBodySubStr string      `json:"requestBody"`
+	RequestBodySubStr string      `json:"request_body"`
 	ResponseBody      string      `json:"body"`
 	ResponseCode      int         `json:"code"`
 	ResponseHeaders   StringSlice `json:"headers"`
@@ -74,6 +74,7 @@ func main() {
 	var ResponseBody string
 	var ResponseHeaders StringSlice
 	var Methods StringSlice
+	var RequestBodySubStr string
 	var IsRegex bool
 	var UseRequestURI bool
 
@@ -88,6 +89,7 @@ func main() {
 	flag.IntVar(&ResponseCode, "code", 0, "set the http status code with which to respond")
 	flag.DurationVar(&ResponseTime, "time", time.Millisecond*0, "set the response time, ex: 250ms or 1m5s")
 	flag.StringVar(&ResponseBody, "body", "", "set the response body")
+	flag.StringVar(&RequestBodySubStr, "request_body_substr", "", "match against POST body with given substr")
 	flag.Var(&ResponseHeaders, "header", "headers, ex: 'Content-Type: application/json'. Multiple -header parameters allowed.")
 	flag.BoolVar(&IsRegex, "pattern_match", false, "set to true to match route patterns with Go regular expressions")
 	flag.BoolVar(&UseRequestURI, "request_uri", false, "set to true to match on raw query (including query params)")
@@ -109,7 +111,7 @@ func main() {
 		}
 	}
 
-	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
+	GlobalConfig = populateGlobalConfig(ConfigData, Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, RequestBodySubStr, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 	log.Printf("starting on port :%d", GlobalConfig.Port)
 
 	startFakettp(GlobalConfig.Port)
@@ -123,7 +125,7 @@ func startFakettp(port int) {
 	}
 }
 
-func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, HyjackPath string, ProxyHost string, ProxyPort int, ProxyDelayTime time.Duration, IsRegex, UseRequestURI bool) *Config {
+func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, ResponseTime time.Duration, ResponseBody string, ResponseHeaders StringSlice, Methods StringSlice, RequestBodySubStr string, HyjackPath string, ProxyHost string, ProxyPort int, ProxyDelayTime time.Duration, IsRegex, UseRequestURI bool) *Config {
 	config := &Config{}
 
 	if len(ConfigData) != 0 {
@@ -182,6 +184,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseHeaders = ResponseHeaders
 		fake.HyjackPath = HyjackPath
 		fake.Methods = Methods
+		fake.RequestBodySubStr = RequestBodySubStr
 		fake.ResponseBody = ResponseBody
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
@@ -196,6 +199,7 @@ func populateGlobalConfig(ConfigData []byte, Port int, ResponseCode int, Respons
 		fake.ResponseHeaders = ResponseHeaders
 		fake.HyjackPath = HyjackPath
 		fake.Methods = Methods
+		fake.RequestBodySubStr = RequestBodySubStr
 		fake.ResponseBody = ResponseBody
 		fake.ResponseCode = ResponseCode
 		fake.ResponseTime = ResponseTime
@@ -364,6 +368,7 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 	methodMatches := false
 	routeMatches := false
 	requestBodyMatches := false
+	requireBodyMatch := false
 
 	if hyjackRoute == "" {
 		routeMatches = true
@@ -376,6 +381,10 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 		} else if hyjackRoute == requestPath {
 			routeMatches = true
 		}
+	}
+
+	if requestBodySubStr != "" {
+		requireBodyMatch = true
 	}
 
 	if requestBodySubStr != "" && strings.Contains(requestBody, requestBodySubStr) {
@@ -391,7 +400,12 @@ func willHyjack(requestMethod string, hyjackMethods StringSlice, requestPath str
 		}
 	}
 
-	return (methodMatches && routeMatches) || (routeMatches && requestBodyMatches)
+	if requireBodyMatch {
+		return routeMatches && requestBodyMatches
+	}
+
+	// fmt.Printf("(%t && %t) || (%t && %t) = %t", methodMatches, routeMatches, routeMatches, requestBodyMatches, (methodMatches && routeMatches) || (routeMatches && requestBodyMatches))
+	return methodMatches && routeMatches
 }
 
 // String adheres to the flag Var interface
