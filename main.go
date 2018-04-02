@@ -247,8 +247,6 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 		requestHyjacked = true
 		err = json.Unmarshal([]byte(hdr), &headers)
 		if err != nil {
-			// TODO: if not json, try to parse key:v\n (like how it is set in the config)
-			// if key:v, convert to var headers http.Header
 			requestHyjacked = false
 			log.Println("unable to read X-Return-Headers", err)
 		}
