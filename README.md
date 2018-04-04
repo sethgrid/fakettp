@@ -131,7 +131,7 @@ Sample Config:
             "code":200,
             "body": "hyjacked",
             "request_body": "catch me"
-		}
+	}
     ]
 }
 ```
