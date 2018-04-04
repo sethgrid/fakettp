@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -30,19 +31,20 @@ func defaultHyjackTestSetup() {
 
 	// flag parameters
 	var Port = 4333
-	var ResponseCode int = http.StatusTeapot
+	var ResponseCode = http.StatusTeapot
 	var ResponseTime time.Duration
-	var ResponseBody string = "hyjacked"
-	var ResponseHeaders StringSlice = StringSlice{"Cache-Control: max-age=3600"}
-	var Methods StringSlice = StringSlice{"GET"}
-	var HyjackPath string = "/bar"
-	var ProxyHost string = "127.0.0.1"
-	var ProxyPort int = 4332
+	var ResponseBody = "hyjacked"
+	var ResponseHeaders = StringSlice{"Cache-Control: max-age=3600"}
+	var Methods = StringSlice{"GET"}
+	var RequestBodySubStr = ""
+	var HyjackPath = "/bar"
+	var ProxyHost = "0.0.0.0"
+	var ProxyPort = 4332
 	var ProxyDelayTime time.Duration
 	var IsRegex bool
 	var UseRequestURI bool
 
-	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
+	GlobalConfig = populateGlobalConfig(getSampleConfig(), Port, ResponseCode, ResponseTime, ResponseBody, ResponseHeaders, Methods, RequestBodySubStr, HyjackPath, ProxyHost, ProxyPort, ProxyDelayTime, IsRegex, UseRequestURI)
 
 	if !serversStarted {
 		// start fakettp proxy and backing server
@@ -116,9 +118,9 @@ func TestHyjacking(t *testing.T) {
 }
 func TestProxyBasedOnMethod(t *testing.T) {
 	defaultHyjackTestSetup()
-	t.Log(">> verify that only methods specified are hyjacked")
+	t.Log(">> verify that only methods specified are hyjacked (post is not specified, should be proxied)")
 	{
-		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader(""))
+		resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), "application/json", strings.NewReader("body!"))
 		if err != nil {
 			t.Fatalf("error getting url from proxy service - %v", err)
 		}
@@ -165,5 +167,73 @@ func TestRequestURI(t *testing.T) {
 		if got, want := string(body), `hyjacked`; got != want {
 			t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
 		}
+	}
+}
+
+func TestPostBodyHyjacking(t *testing.T) {
+	defaultHyjackTestSetup()
+	catchMe := "catch me"                 // matches config in sampleConfig() in config_test.go
+	dontCatchMe := "some other post body" // does not match config in sampleConfig() in config_test.go
+
+	t.Log(">> verify that we can match on post body")
+	resp, err := http.Post(fmt.Sprintf("http://127.0.0.1:%d/api/post", GlobalConfig.Port), "text/plain", strings.NewReader(catchMe))
+	if err != nil {
+		t.Fatalf("error getting url from proxy service - %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	if got, want := string(body), `hyjacked`; got != want {
+		t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+	}
+	t.Log(">> verify that we can match still proxy on post body not matched")
+	resp, err = http.Post(fmt.Sprintf("http://127.0.0.1:%d/api/post", GlobalConfig.Port), "text/plain", strings.NewReader(dontCatchMe))
+	if err != nil {
+		t.Fatalf("error getting url from proxy service - %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ = ioutil.ReadAll(resp.Body)
+	if got, want := string(body), `proxied`; got != want {
+		t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+	}
+
+}
+
+func TestXReturnOverride(t *testing.T) {
+	// t.Skip()
+	defaultHyjackTestSetup()
+	buf := &bytes.Buffer{}
+	log.SetOutput(buf)
+	t.Log(">> verify X-Return-* overrides exiting config")
+	// Override an existing configured endpoint with X-Return-* values
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/bar", GlobalConfig.Port), nil)
+	if err != nil {
+		t.Fatalf("unable to set up request - %v", err)
+	}
+	req.Header.Add("X-Return-Code", "411")
+	req.Header.Add("X-Return-Data", "overridden")
+	req.Header.Add("X-Return-Headers", `{"X-Custom-Header":["custom value"]}`)
+	req.Header.Add("X-Return-Delay", "200ms")
+	cli := http.Client{}
+	cli.Timeout = 5 * time.Second
+	start := time.Now()
+	resp, err := cli.Do(req)
+	if err != nil {
+		t.Log(buf.String())
+		t.Fatalf("error performing HTTP request - %v", err)
+	}
+	defer resp.Body.Close()
+	// ensure we've waited the 200ms
+	if time.Since(start).Nanoseconds() < 200*1e6 {
+		t.Errorf("did not delay at least 200ms")
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	if got, want := string(body), `overridden`; got != want {
+		t.Errorf("\ngot body:\n%s\nwant body:\n%s\n", got, want)
+	}
+	if got, want := resp.StatusCode, 411; got != want {
+		t.Errorf("got status code %d, want %d", got, want)
+	}
+	if got, want := resp.Header.Get("X-Custom-Header"), "custom value"; got != want {
+		t.Errorf("got value for header X-Custom-Header `%s`, want `%s`", got, want)
 	}
 }
