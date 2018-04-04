@@ -24,6 +24,8 @@ What inspired this repo!: We had Service A calling Service B's endpoints interna
 Sample Usage
 ------------
 
+There are three main ways to use `fakeTTP`. Command line arguments, config file, or `X-Return-*` headers.
+
 From the source or compiled binary, just set the response you want. Note that you can pass in multiple headers to be returned by using `-header` repeatedly. You can also limit which methods the hyjacking will affect with multiple `-method` parameters. You can also choose to match against a pattern string if you additionally pass in the `-pattern_match` flag.
 
 
@@ -80,6 +82,10 @@ Config File
 
 When passing command line flags, you are limited to either hyjacking all requests or only requests to a single endpoint. With a config file, you can specify multiple routes to behave differently. Note: config values are overridden by command line flags in the case of `proxy_host`, `proxy_port`, and `port`. For all other values, they add an additional fake for hyjacking.
 
+In the fakes list, you can set the "hyjack" url that will be matched against. For return values, you can specify code, body, headers, and time to delay the response.
+
+There are some additional configs that deal with the matching. You can specify that the hyjack url is intended for a pattern_match (using standard regex). Normally, the hyjack url will just match the URL.path. If you request_uri to be true, it will match against the request's RequestURI. Lastly, for matching against different POST requests where the urls will be the same, you can specify the request_body param which will match if the given substring is in the request body payload.
+
 Sample Config:
 ```json
 {
@@ -116,10 +122,29 @@ Sample Config:
             "code": 404,
             "pattern_match": true,
             "request_uri": true
-        }
+        },
+        {
+            "hyjack": "/api/post",
+            "methods": [
+                "POST"
+            ],
+            "code":200,
+            "body": "hyjacked",
+            "request_body": "catch me"
+		}
     ]
 }
 ```
+
+X-Return-* Headers
+-----------
+You can hit the proxy directly and bypass configurations by using the following `X-Return-*` headers. 
+ - X-Return-Delay: a time parsable duration, like 250ms or 1m30s.
+ - X-Return-Code: a valid http status code
+ - X-Return-Data: the string data you'd like to return
+ - X-Return-Headers: a json blob of `map[string][]string`, such as `{"X-Custom-Header":["custom value"]}`.
+
+This allows you to use the `fakeTTP` binary in a more programatic fashion.
 
 Docker Use Cases
 -----------
